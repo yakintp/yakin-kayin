@@ -191,6 +191,17 @@ function isValueValid(val) {
     return v !== "" && v !== "-" && v !== "null";
 }
 
+function getIcon(color) {
+    return new L.Icon({
+        iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
+        shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
+    });
+}
+
 function normalize(str) {
     return str
         ? str.toString()
@@ -203,6 +214,7 @@ function normalize(str) {
 
 function getDistance(lat1, lon1, lat2, lon2) {
     var R = 6371;
+
     var dLat = (lat2 - lat1) * Math.PI / 180;
     var dLon = (lon2 - lon1) * Math.PI / 180;
 
@@ -216,24 +228,99 @@ function getDistance(lat1, lon1, lat2, lon2) {
     return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-// ===== LÉGENDE MODIFIÉE =====
+fetch("data.csv")
+.then(r => r.text())
+.then(csv => {
+
+    Papa.parse(csv, {
+        header: true,
+        skipEmptyLines: true,
+
+        complete: function(results) {
+
+            let frsSet = new Set();
+            let villeSet = new Set();
+            let cpSet = new Set();
+            let prodSet = new Set();
+
+            results.data.forEach(row => {
+
+                let latF = parseFloat(row["latitude (fournisseur)"]?.replace(",", "."));
+                let lngF = parseFloat(row["longitude (fournisseur)"]?.replace(",", "."));
+
+                let latV = parseFloat(row["Latitude ville"]?.replace(",", "."));
+                let lngV = parseFloat(row["Longitude ville"]?.replace(",", "."));
+
+                let f = row["fournisseur"]?.trim();
+                let v = row["ville"]?.trim();
+                let cp = row["CP"]?.trim();
+                let p = row["Produit"]?.trim() || row["Produit "]?.trim();
+
+                if (isValueValid(v)) {
+                    villeSet.add(v);
+                    if (!isNaN(latV)) villesCoords[normalize(v)] = [latV, lngV];
+                }
+
+                if (!isValueValid(f) || isNaN(latF) || isNaN(lngF)) return;
+
+                frsSet.add(f);
+                if (isValueValid(cp)) cpSet.add(cp);
+                if (isValueValid(p)) prodSet.add(p);
+
+                let color = codesCouleurs[f] || "blue";
+
+                let popupContent = `
+                    <div style="line-height:1.6;">
+                        <b>Fournisseur :</b> ${f}<br>
+                        <b>Adresse :</b> ${row["adresse complete"] || ""}<br>
+                        <b>Ville :</b> ${v} (${cp})<br>
+                        <b>Produit :</b> ${p}<br>
+                        <b>Email :</b>
+                        <a href="mailto:${row["Email"]}">
+                            ${row["Email"] || ""}
+                        </a>
+                    </div>
+                `;
+
+                let m = L.marker([latF, lngF], {
+                    icon: getIcon(color)
+                }).bindPopup(popupContent);
+
+                m.data = { f, v, cp, p, lat: latF, lng: lngF };
+
+                m.addTo(map);
+
+                markers.push(m);
+            });
+
+            remplirSelect("filtreNom", frsSet, "Fournisseur");
+            remplirSelect("filtreVille", villeSet, "Ville");
+            remplirSelect("filtreCP", cpSet, "CP");
+            remplirSelect("filtreProduit", prodSet, "Produit");
+
+            ajouterLegendes(); // initialisation
+        }
+    });
+});
+
+function remplirSelect(id, set, label) {
+    let s = document.getElementById(id);
+    s.innerHTML = `<option value="">${label} : Tous</option>`;
+    Array.from(set).sort().forEach(v => {
+        if (isValueValid(v)) {
+            let o = document.createElement("option");
+            o.value = v;
+            o.textContent = v;
+            s.appendChild(o);
+        }
+    });
+}
+
+/* ✅ LÉGENDE MODIFIÉE : pilotée par les dropdowns */
 function ajouterLegendes() {
 
     if (window.dynamicLegend) {
         map.removeControl(window.dynamicLegend);
-    }
-
-    let nom = document.getElementById("filtreNom").value;
-    let prod = document.getElementById("filtreProduit").value;
-
-    let fournisseursAffiches = [];
-
-    if (nom) {
-        fournisseursAffiches = [nom];
-    } else if (prod) {
-        fournisseursAffiches = Object.keys(codesCouleurs);
-    } else {
-        fournisseursAffiches = Object.keys(codesCouleurs);
     }
 
     var legend = L.control({ position: 'bottomright' });
@@ -242,15 +329,21 @@ function ajouterLegendes() {
 
         var div = L.DomUtil.create('div', 'legend');
 
+        let selectedF = document.getElementById("filtreNom").value;
+
         div.innerHTML = `<b class="title">Fournisseurs</b>`;
 
-        fournisseursAffiches.sort().forEach(f => {
+        let fournisseurs = selectedF
+            ? [selectedF]
+            : Object.keys(codesCouleurs);
+
+        fournisseurs.sort().forEach(f => {
 
             if (!codesCouleurs[f]) return;
 
             let iconHtml = logosMap[f]
                 ? `<img src="${logosMap[f]}" class="legend-logo"
-                    onerror="this.outerHTML='<div class=\'legend-color-box\' style=\'background:${codesCouleurs[f]}'></div>'">`
+                    onerror="this.outerHTML='<div class=\\'legend-color-box\\' style=\\'background:${codesCouleurs[f]}\\'></div>'">`
                 : `<div class="legend-color-box" style="background:${codesCouleurs[f]}"></div>`;
 
             let span = document.createElement("span");
@@ -279,8 +372,6 @@ function filtrer() {
     let prod = normalize(document.getElementById("filtreProduit").value);
     let rayon = parseFloat(document.getElementById("filtreRayon").value);
 
-    let fournisseursVisibles = new Set();
-
     if (cercleRayon) map.removeLayer(cercleRayon);
 
     markers.forEach(m => {
@@ -292,12 +383,8 @@ function filtrer() {
         if (cp && normalize(d.cp) !== cp) match = false;
         if (prod && normalize(d.p) !== prod) match = false;
 
-        if (match) {
-            m.addTo(map);
-            fournisseursVisibles.add(d.f);
-        } else {
-            map.removeLayer(m);
-        }
+        if (match) m.addTo(map);
+        else map.removeLayer(m);
     });
 
     ajouterLegendes();
