@@ -32,6 +32,7 @@
             margin-bottom: 8px; 
             border-bottom: 2px solid #eee; 
             color: red; 
+            line-height: 1.4; 
         }
 
         .legend span { 
@@ -114,6 +115,15 @@ var map = L.map('map').setView([48.85, 2.35], 9);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
+var boundsIdF = [[48.12, 1.44], [49.24, 3.56]];
+
+L.rectangle(boundsIdF, {
+    color: "#000000",
+    weight: 2,
+    fill: false,
+    interactive: false
+}).addTo(map);
+
 var markers = [];
 var villesCoords = {};
 var cercleRayon = null;
@@ -151,6 +161,14 @@ var codesCouleurs = {
     "LARIVIERE": "blue"
 };
 
+var logosMap = {
+    "Loxam": "https://loxam.com/wp-content/uploads/2022/08/logo-loxam-rental.png",
+    "Point P": "Point P.png",
+    "Raboni": "https://produits.batiactu.com/img/indus_auto/350-350-c/20200422_160646-raboni_2020.jpg",
+    "Cemex": "https://findlogovector.com/wp-content/uploads/2018/12/cemex-logo-vector.png",
+    "Tersen": "TERSEN.png"
+};
+
 function isValueValid(val) {
     if (!val) return false;
     let v = val.toString().trim();
@@ -178,102 +196,51 @@ function normalize(str) {
         : "";
 }
 
-fetch("data.csv")
-.then(r => r.text())
-.then(csv => {
+function getDistance(lat1, lon1, lat2, lon2) {
+    var R = 6371;
+    var dLat = (lat2 - lat1) * Math.PI / 180;
+    var dLon = (lon2 - lon1) * Math.PI / 180;
 
-    Papa.parse(csv, {
-        header: true,
-        skipEmptyLines: true,
+    var a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) *
+        Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
 
-        complete: function(results) {
-
-            let frsSet = new Set();
-            let villeSet = new Set();
-            let cpSet = new Set();
-            let prodSet = new Set();
-
-            results.data.forEach(row => {
-
-                let latF = parseFloat(row["latitude (fournisseur)"]?.replace(",", "."));
-                let lngF = parseFloat(row["longitude (fournisseur)"]?.replace(",", "."));
-
-                let f = row["fournisseur"]?.trim();
-                let v = row["ville"]?.trim();
-                let cp = row["CP"]?.trim();
-                let p = row["Produit"]?.trim() || row["Produit "]?.trim();
-
-                if (!isValueValid(f) || isNaN(latF) || isNaN(lngF)) return;
-
-                frsSet.add(f);
-                if (isValueValid(v)) villeSet.add(v);
-                if (isValueValid(cp)) cpSet.add(cp);
-                if (isValueValid(p)) prodSet.add(p);
-
-                let m = L.marker([latF, lngF], {
-                    icon: getIcon(codesCouleurs[f] || "blue")
-                }).addTo(map);
-
-                m.data = { f, v, cp, p, lat: latF, lng: lngF };
-                markers.push(m);
-            });
-
-            remplirSelect("filtreNom", frsSet, "Fournisseur");
-            remplirSelect("filtreVille", villeSet, "Ville");
-            remplirSelect("filtreCP", cpSet, "CP");
-            remplirSelect("filtreProduit", prodSet, "Produit");
-
-            ajouterLegendes(); // 🔥 important
-        }
-    });
-});
-
-function remplirSelect(id, set, label) {
-    let s = document.getElementById(id);
-    s.innerHTML = `<option value="">${label} : Tous</option>`;
-    Array.from(set).sort().forEach(v => {
-        if (isValueValid(v)) {
-            let o = document.createElement("option");
-            o.value = v;
-            o.textContent = v;
-            s.appendChild(o);
-        }
-    });
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-/* ✅ SEULE MODIF : légende = dropdown fournisseur uniquement */
 function ajouterLegendes() {
 
     if (window.dynamicLegend) {
         map.removeControl(window.dynamicLegend);
     }
 
-    window.dynamicLegend = L.control({ position: 'bottomright' });
+    var legend = L.control({ position: 'bottomright' });
 
-    window.dynamicLegend.onAdd = function () {
+    legend.onAdd = function() {
 
-        let div = L.DomUtil.create('div', 'legend');
-
+        var div = L.DomUtil.create('div', 'legend');
         div.innerHTML = `<b class="title">Fournisseurs</b>`;
 
-        // 🔥 SOURCE UNIQUE = DROPDOWN
         let select = document.getElementById("filtreNom");
 
-        let fournisseurs = Array.from(select.options)
-            .map(o => o.value)
-            .filter(v => v);
+        Array.from(select.options).forEach(opt => {
 
-        fournisseurs.sort().forEach(f => {
+            if (!opt.value) return;
+
+            let f = opt.value;
+
+            let iconHtml = logosMap[f]
+                ? `<img src="${logosMap[f]}" class="legend-logo">`
+                : `<div class="legend-color-box" style="background:${codesCouleurs[f] || '#ccc'}"></div>`;
 
             let span = document.createElement("span");
-
-            span.innerHTML = `
-                <div class="legend-color-box" style="background:${codesCouleurs[f] || 'blue'}"></div>
-                ${f}
-            `;
+            span.innerHTML = `${iconHtml} ${f}`;
 
             span.onclick = () => {
-                document.getElementById("filtreNom").value = f;
+                select.value = f;
                 filtrer();
             };
 
@@ -283,22 +250,8 @@ function ajouterLegendes() {
         return div;
     };
 
-    window.dynamicLegend.addTo(map);
-}
-
-function filtrer() {
-
-    let f = document.getElementById("filtreNom").value;
-
-    markers.forEach(m => {
-        if (!f || m.data.f === f) {
-            m.addTo(map);
-        } else {
-            map.removeLayer(m);
-        }
-    });
-
-    ajouterLegendes();
+    legend.addTo(map);
+    window.dynamicLegend = legend;
 }
 
 </script>
