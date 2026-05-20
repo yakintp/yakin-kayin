@@ -32,7 +32,6 @@
             margin-bottom: 8px; 
             border-bottom: 2px solid #eee; 
             color: red; 
-            line-height: 1.4; 
         }
 
         .legend span { 
@@ -51,13 +50,11 @@
             width: 20px; 
             height: 20px; 
             object-fit: contain; 
-            border-radius: 2px; 
             background: white; 
-            border: 1px solid #f0f0f0; 
+            border: 1px solid #eee; 
         }
 
         .legend-color-box { 
-            display: inline-block; 
             width: 16px; 
             height: 16px; 
             border-radius: 3px; 
@@ -74,7 +71,7 @@
 </div>
 
 <div class="filters">
-    <select id="filtreNom" onchange="filtrer()">
+    <select id="filtreNom" onchange="filtrer(); ajouterLegendes();">
         <option value="">Fournisseur : Tous</option>
     </select>
 
@@ -86,7 +83,7 @@
         <option value="">CP : Tous</option>
     </select>
 
-    <select id="filtreProduit" onchange="filtrer()">
+    <select id="filtreProduit" onchange="filtrer(); ajouterLegendes();">
         <option value="">Produit : Tous</option>
     </select>
 
@@ -115,318 +112,191 @@ var map = L.map('map').setView([48.85, 2.35], 9);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-var boundsIdF = [[48.12, 1.44], [49.24, 3.56]];
-
-L.rectangle(boundsIdF, {
-    color: "#000000",
-    weight: 2,
-    fill: false,
-    interactive: false
-}).addTo(map);
-
 var markers = [];
 var villesCoords = {};
 var cercleRayon = null;
 
 var codesCouleurs = {
-    "ATPL CASELAS": "blue",
-    "BSM": "red",
-    "Bouvelot TP": "green",
-    "CAUPAMAT CADENZ": "violet",
-    "CHEUTIN": "orange",
-    "COLBER": "black",
-    "EVA INDUSTRIES": "red",
-    "EUROPIERRE": "blue",
-    "EVO LOCATION": "green",
-    "Fransbonhomme": "violet",
-    "GO POMPE": "orange",
-    "IDF MARQUAGE": "black",
     "Loxam": "blue",
-    "LM DISTRIBUTION": "red",
     "Point P": "red",
-    "pum": "black",
     "Raboni": "green",
-    "RFM": "violet",
-    "SODEXTRA": "black",
-    "SNB": "orange",
-    "SOL 78": "grey",
-    "SPME": "blue",
-    "SCIABBARRASI RENT": "violet",
-    "Tersen": "yellow",
-    "UTD": "green",
-    "VIACOV": "red",
-    "YPREMA": "black",
-    "Cemex": "grey",
-    "Clim plus": "orange",
-    "LARIVIERE": "blue"
+    "Tersen": "orange"
 };
 
 var logosMap = {
     "Loxam": "https://loxam.com/wp-content/uploads/2022/08/logo-loxam-rental.png",
     "Point P": "Point P.png",
-    "Raboni": "https://produits.batiactu.com/img/indus_auto/350-350-c/20200422_160646-raboni_2020.jpg",
-    "Cemex": "https://findlogovector.com/wp-content/uploads/2018/12/cemex-logo-vector.png",
-    "Tersen": "TERSEN.png",
-    "pum": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTUeL7T4H-li-LTHqo0R5zvuokh7v_im9x02g&s",
-    "YPREMA": "YPERMA.jpg",
-    "Fransbonhomme": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQW9mK52-rP1Y7Z6Gg6h3bYl5v6X8vY5-L7Ag&s",
-    "COLBER": "COLBER.jpg",
-    "VIACOV": "VIACOV.jpg",
-    "Bouvelot TP": "Bouvelot TP.png",
-    "CHEUTIN": "CHEUTIN.png",
-    "SNB": "SNB.jpg",
-    "EVO LOCATION": "EVO LOCATION.png",
-    "UTD": "UTD.png",
-    "SCIABBARRASI RENT": "SCIABBARRASI RENT.png",
-    "IDF MARQUAGE": "IDF MARQUAGE.jpg",
-    "EUROPIERRE": "EUROPIERRE.jpg",
-    "ATPL CASELAS": "ATPL CASELAS .png",
-    "Clim plus": "https://assets.pyc.fr/uploads/media/image/0001/73/thumb_72064_image_article_photo.png",
-    "LARIVIERE": "https://img.batiweb.com/repo-images/supplier/3422/400_300/lariviere-logo.webp"
+    "Raboni": "https://produits.batiactu.com/img/indus_auto/350-350-c/20200422_160646-raboni_2020.jpg"
 };
 
-function isValueValid(val) {
-    if (!val) return false;
-    let v = val.toString().trim();
-    return v !== "" && v !== "-" && v !== "null";
+function normalize(str){
+    return str ? str.toString().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().toLowerCase() : "";
 }
 
-function getIcon(color) {
-    return new L.Icon({
-        iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
-        shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-        popupAnchor: [1, -34],
-        shadowSize: [41, 41]
-    });
-}
-
-function normalize(str) {
-    return str
-        ? str.toString()
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .trim()
-            .toLowerCase()
-        : "";
-}
-
-function getDistance(lat1, lon1, lat2, lon2) {
+function getDistance(lat1, lon1, lat2, lon2){
     var R = 6371;
-    var dLat = (lat2 - lat1) * Math.PI / 180;
-    var dLon = (lon2 - lon1) * Math.PI / 180;
+    var dLat = (lat2-lat1)*Math.PI/180;
+    var dLon = (lon2-lon1)*Math.PI/180;
 
     var a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(lat1 * Math.PI / 180) *
-        Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
+        Math.sin(dLat/2)**2 +
+        Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+        Math.sin(dLon/2)**2;
 
-    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+    return R*(2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));
 }
 
 fetch("data.csv")
-.then(r => r.text())
-.then(csv => {
+.then(r=>r.text())
+.then(csv=>{
 
-    Papa.parse(csv, {
-        header: true,
-        skipEmptyLines: true,
+    Papa.parse(csv,{
+        header:true,
+        skipEmptyLines:true,
+        complete:function(results){
 
-        complete: function(results) {
+            let frsSet=new Set();
+            let villeSet=new Set();
+            let cpSet=new Set();
+            let prodSet=new Set();
 
-            let frsSet = new Set();
-            let villeSet = new Set();
-            let cpSet = new Set();
-            let prodSet = new Set();
+            results.data.forEach(row=>{
 
-            results.data.forEach(row => {
+                let lat=parseFloat(row["latitude (fournisseur)"]?.replace(",","."));
+                let lng=parseFloat(row["longitude (fournisseur)"]?.replace(",","."));
 
-                let latF = parseFloat(row["latitude (fournisseur)"]?.replace(",", "."));
-                let lngF = parseFloat(row["longitude (fournisseur)"]?.replace(",", "."));
+                let f=row["fournisseur"]?.trim();
+                let v=row["ville"]?.trim();
+                let cp=row["CP"]?.trim();
+                let p=row["Produit"]?.trim();
 
-                let latV = parseFloat(row["Latitude ville"]?.replace(",", "."));
-                let lngV = parseFloat(row["Longitude ville"]?.replace(",", "."));
-
-                let f = row["fournisseur"]?.trim();
-                let v = row["ville"]?.trim();
-                let cp = row["CP"]?.trim();
-                let p = row["Produit"]?.trim() || row["Produit "]?.trim();
-
-                if (isValueValid(v)) {
-                    villeSet.add(v);
-
-                    if (!isNaN(latV)) {
-                        villesCoords[normalize(v)] = [latV, lngV];
-                    }
-                }
-
-                if (!isValueValid(f) || isNaN(latF) || isNaN(lngF)) return;
+                if(!f||isNaN(lat)||isNaN(lng)) return;
 
                 frsSet.add(f);
-
-                if (isValueValid(cp)) cpSet.add(cp);
-                if (isValueValid(p)) prodSet.add(p);
+                if(v) villeSet.add(v);
+                if(cp) cpSet.add(cp);
+                if(p) prodSet.add(p);
 
                 let color = codesCouleurs[f] || "blue";
 
-                let popupContent = `
-                    <div style="line-height:1.6;">
-                        <b>Fournisseur :</b> ${f}<br>
-                        <b>Adresse :</b> ${row["adresse complete"] || ""}<br>
-                        <b>Ville :</b> ${v} (${cp})<br>
-                        <b>Produit :</b> ${p}<br>
-                        <b>Email :</b>
-                        <a href="mailto:${row["Email"]}">
-                            ${row["Email"] || ""}
-                        </a>
-                    </div>
-                `;
+                let m=L.marker([lat,lng],{
+                    icon:L.icon({
+                        iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
+                        shadowUrl:'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+                        iconSize:[25,41],
+                        iconAnchor:[12,41]
+                    })
+                }).addTo(map);
 
-                let m = L.marker([latF, lngF], {
-                    icon: getIcon(color)
-                }).bindPopup(popupContent);
+                m.data={f,v,cp,p,lat,lng};
 
-                m.data = { f, v, cp, p, lat: latF, lng: lngF };
-
-                m.addTo(map);
                 markers.push(m);
             });
 
-            remplirSelect("filtreNom", frsSet, "Fournisseur");
-            remplirSelect("filtreVille", villeSet, "Ville");
-            remplirSelect("filtreCP", cpSet, "CP");
-            remplirSelect("filtreProduit", prodSet, "Produit");
+            remplir("filtreNom",frsSet,"Fournisseur");
+            remplir("filtreVille",villeSet,"Ville");
+            remplir("filtreCP",cpSet,"CP");
+            remplir("filtreProduit",prodSet,"Produit");
 
             ajouterLegendes();
         }
     });
 });
 
-function remplirSelect(id, set, label) {
-    let s = document.getElementById(id);
-    s.innerHTML = `<option value="">${label} : Tous</option>`;
-
-    Array.from(set).sort().forEach(v => {
-        if (isValueValid(v)) {
-            let o = document.createElement("option");
-            o.value = v;
-            o.textContent = v;
-            s.appendChild(o);
-        }
+function remplir(id,set,label){
+    let s=document.getElementById(id);
+    s.innerHTML=`<option value="">${label} : Tous</option>`;
+    Array.from(set).sort().forEach(v=>{
+        let o=document.createElement("option");
+        o.value=v;
+        o.textContent=v;
+        s.appendChild(o);
     });
 }
 
-/* ====== MODIF UNIQUE : synchronisation légende + produit ====== */
-function ajouterLegendes(fournisseursFiltres = null) {
+/* =========================
+   LÉGENDE CORRIGÉE
+   ========================= */
+function ajouterLegendes(){
 
-    if (window.dynamicLegend) {
-        map.removeControl(window.dynamicLegend);
+    if(window.legendCtrl){
+        map.removeControl(window.legendCtrl);
     }
 
-    var legend = L.control({ position: 'bottomright' });
+    let produit = normalize(document.getElementById("filtreProduit").value);
+    let select = document.getElementById("filtreNom");
 
-    legend.onAdd = function() {
+    let fournisseurs = Array.from(select.options)
+        .map(o => o.value)
+        .filter(v => v);
 
-        var div = L.DomUtil.create('div', 'legend');
+    let visibles = new Set();
 
-        div.innerHTML = `<b class="title" style="color:red;">Fournisseurs</b>`;
-
-        let produitActif = normalize(document.getElementById("filtreProduit").value);
-
-        let fournisseursAffiches = fournisseursFiltres || Object.keys(codesCouleurs);
-
-        // SYNCHRO PRODUIT + FOURNISSEUR
-        if (produitActif) {
-            let filtresOk = new Set();
-            markers.forEach(m => {
-                if (normalize(m.data.p) === produitActif) {
-                    filtresOk.add(m.data.f);
-                }
-            });
-            fournisseursAffiches = fournisseursAffiches.filter(f => filtresOk.has(f));
+    markers.forEach(m=>{
+        let d=m.data;
+        if(!produit || normalize(d.p) === produit){
+            visibles.add(d.f);
         }
+    });
 
-        fournisseursAffiches.sort().forEach(f => {
+    var legend = L.control({position:"bottomright"});
 
-            if (!codesCouleurs[f]) return;
+    legend.onAdd=function(){
 
-            let iconHtml = logosMap[f]
-                ? `<img src="${logosMap[f]}" class="legend-logo"
-                    onerror="this.outerHTML='<div class=\\'legend-color-box\\' style=\\'background:${codesCouleurs[f]}\\'></div>'">`
-                : `<div class="legend-color-box" style="background:${codesCouleurs[f]}"></div>`;
+        let div=L.DomUtil.create("div","legend");
 
-            let span = document.createElement("span");
-            span.innerHTML = `${iconHtml} ${f}`;
+        div.innerHTML=`<b class="title">Fournisseurs</b>`;
 
-            span.onclick = () => {
-                document.getElementById("filtreNom").value = f;
+        fournisseurs.forEach(f=>{
+
+            if(produit && !visibles.has(f)){
+                return;
+            }
+
+            let color=codesCouleurs[f]||"#999";
+
+            let logo=logosMap[f]
+                ? `<img src="${logosMap[f]}" class="legend-logo">`
+                : `<div class="legend-color-box" style="background:${color}"></div>`;
+
+            let item=document.createElement("span");
+
+            item.innerHTML=`${logo} ${f}`;
+
+            item.onclick=()=>{
+                document.getElementById("filtreNom").value=f;
                 filtrer();
+                ajouterLegendes();
             };
 
-            div.appendChild(span);
+            div.appendChild(item);
         });
 
         return div;
     };
 
     legend.addTo(map);
-    window.dynamicLegend = legend;
+    window.legendCtrl=legend;
 }
 
-function filtrer() {
+function filtrer(){
 
-    let nom = normalize(document.getElementById("filtreNom").value);
-    let ville = normalize(document.getElementById("filtreVille").value);
-    let cp = normalize(document.getElementById("filtreCP").value);
-    let prod = normalize(document.getElementById("filtreProduit").value);
+    let nom=normalize(document.getElementById("filtreNom").value);
+    let prod=normalize(document.getElementById("filtreProduit").value);
 
-    let rayon = parseFloat(document.getElementById("filtreRayon").value);
+    markers.forEach(m=>{
+        let d=m.data;
 
-    let fournisseursVisibles = new Set();
+        let ok=true;
 
-    if (cercleRayon) map.removeLayer(cercleRayon);
+        if(nom && normalize(d.f)!==nom) ok=false;
+        if(prod && normalize(d.p)!==prod) ok=false;
 
-    let centre = (ville && villesCoords[ville]) ? villesCoords[ville] : null;
-
-    if (centre && rayon > 0) {
-        cercleRayon = L.circle(centre, {
-            radius: rayon * 1000,
-            color: '#333',
-            fillOpacity: 0.1,
-            weight: 1
-        }).addTo(map);
-
-        map.fitBounds(cercleRayon.getBounds());
-    }
-
-    markers.forEach(m => {
-
-        let d = m.data;
-        let match = true;
-
-        if (nom && normalize(d.f) !== nom) match = false;
-        if (cp && normalize(d.cp) !== cp) match = false;
-        if (prod && normalize(d.p) !== prod) match = false;
-
-        if (centre) {
-            let dist = getDistance(centre[0], centre[1], d.lat, d.lng);
-            if (normalize(d.v) !== ville && dist > rayon) match = false;
-        } else if (ville && normalize(d.v) !== ville) {
-            match = false;
-        }
-
-        if (match) {
-            m.addTo(map);
-            fournisseursVisibles.add(d.f);
-        } else {
-            map.removeLayer(m);
-        }
+        if(ok) map.addLayer(m);
+        else map.removeLayer(m);
     });
 
-    ajouterLegendes(Array.from(fournisseursVisibles));
+    ajouterLegendes();
 }
 
 </script>
