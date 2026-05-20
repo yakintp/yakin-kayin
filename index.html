@@ -1,55 +1,106 @@
 <!DOCTYPE html> 
 <html lang="fr"> 
 <head>
-<meta charset="utf-8"/>
-<title>Carte Fournisseurs Île-de-France</title>
+    <meta charset="utf-8"/>
+    <title>Carte Fournisseurs Île-de-France</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 15px; background: #f4f4f4; }
+        .header { display: flex; align-items: center; background: white; padding: 10px 20px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); gap: 20px; }
+        .header img { height: 50px; width: auto; }
+        .header h2 { margin: 0; color: #333; }
+        #map { height: 600px; border-radius: 8px; border: 1px solid #ccc; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .filters { margin-bottom: 15px; background: white; padding: 15px; border-radius: 8px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        select, input { padding: 8px; border-radius: 4px; border: 1px solid #ddd; min-width: 150px; }
+        .range-box { background: #eef2f3; padding: 8px 15px; border-radius: 6px; border: 1px solid #ddd; display: flex; align-items: center; gap: 10px; }
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+        .legend { 
+            background: white; 
+            padding: 10px; 
+            border-radius: 8px; 
+            box-shadow: 0 0 5px rgba(0,0,0,0.3); 
+            line-height: 22px; 
+            max-height: 500px; 
+            overflow-y: auto; 
+            width: 260px; 
+            font-size: 11px;
+        }
 
-<style>
-body { font-family: Arial; margin:0; padding:15px; background:#f4f4f4; }
-.header { display:flex; align-items:center; background:#fff; padding:10px; border-radius:8px; margin-bottom:10px; }
-#map { height:600px; border-radius:8px; }
+        .legend b.title { 
+            font-size: 14px; 
+            display: block; 
+            margin-bottom: 8px; 
+            border-bottom: 2px solid #eee; 
+            color: red; 
+        }
 
-.legend {
-    background:#fff;
-    padding:10px;
-    border-radius:8px;
-    width:250px;
-    font-size:12px;
-    max-height:400px;
-    overflow:auto;
-    box-shadow:0 0 5px rgba(0,0,0,0.2);
-}
+        .legend span { 
+            cursor: pointer; 
+            display: flex; 
+            align-items: center; 
+            gap: 8px; 
+            padding: 3px 5px; 
+            border-radius: 3px; 
+            font-weight: bold; 
+        }
 
-.legend b { color:red; display:block; margin-bottom:8px; }
+        .legend span:hover { background: #f0f0f0; }
 
-.legend-item{
-    display:flex;
-    align-items:center;
-    gap:8px;
-    padding:3px;
-    cursor:pointer;
-}
+        .legend-logo { 
+            width: 20px; 
+            height: 20px; 
+            object-fit: contain; 
+            border-radius: 2px; 
+            background: white; 
+            border: 1px solid #f0f0f0; 
+        }
 
-.legend-box{
-    width:14px;
-    height:14px;
-    border-radius:3px;
-}
-</style>
+        .legend-color-box { 
+            display: inline-block; 
+            width: 16px; 
+            height: 16px; 
+            border-radius: 3px; 
+            border: 1px solid #999; 
+        }
+    </style>
 </head>
 
 <body>
 
 <div class="header">
-    <h2>Carte Fournisseurs</h2>
+    <img src="logo.png" alt="Logo">
+    <h2>Carte Fournisseurs Île-de-France</h2>
 </div>
 
 <div class="filters">
     <select id="filtreNom" onchange="filtrer()">
         <option value="">Fournisseur : Tous</option>
     </select>
+
+    <select id="filtreVille" onchange="filtrer()">
+        <option value="">Ville : Toutes</option>
+    </select>
+
+    <select id="filtreCP" onchange="filtrer()">
+        <option value="">CP : Tous</option>
+    </select>
+
+    <select id="filtreProduit" onchange="filtrer()">
+        <option value="">Produit : Tous</option>
+    </select>
+
+    <div class="range-box">
+        Rayon :
+        <input type="range" id="filtreRayon" min="0" max="50" value="0"
+        oninput="document.getElementById('rayonVal').innerText = this.value; filtrer();">
+
+        <span id="rayonVal">0</span> km
+    </div>
+
+    <button onclick="location.reload()"
+    style="background:#ff7675; color:white; border:none; padding:8px 15px; border-radius:4px; cursor:pointer;">
+        Reset
+    </button>
 </div>
 
 <div id="map"></div>
@@ -59,119 +110,195 @@ body { font-family: Arial; margin:0; padding:15px; background:#f4f4f4; }
 
 <script>
 
-var map = L.map('map').setView([48.85,2.35],9);
+var map = L.map('map').setView([48.85, 2.35], 9);
+
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-var markers=[];
+var markers = [];
+var villesCoords = {};
+var cercleRayon = null;
 
-var colors = {
-    "Loxam":"blue",
-    "Point P":"red",
-    "Raboni":"green",
-    "Cemex":"grey",
-    "Tersen":"orange"
+var codesCouleurs = {
+    "ATPL CASELAS": "blue",
+    "BSM": "red",
+    "Bouvelot TP": "green",
+    "CAUPAMAT CADENZ": "violet",
+    "CHEUTIN": "orange",
+    "COLBER": "black",
+    "EVA INDUSTRIES": "red",
+    "EUROPIERRE": "blue",
+    "EVO LOCATION": "green",
+    "Fransbonhomme": "violet",
+    "GO POMPE": "orange",
+    "IDF MARQUAGE": "black",
+    "Loxam": "blue",
+    "LM DISTRIBUTION": "red",
+    "Point P": "red",
+    "pum": "black",
+    "Raboni": "green",
+    "RFM": "violet",
+    "SODEXTRA": "black",
+    "SNB": "orange",
+    "SOL 78": "grey",
+    "SPME": "blue",
+    "SCIABBARRASI RENT": "violet",
+    "Tersen": "yellow",
+    "UTD": "green",
+    "VIACOV": "red",
+    "YPREMA": "black",
+    "Cemex": "grey",
+    "Clim plus": "orange",
+    "LARIVIERE": "blue"
 };
 
-function getColor(f){
-    return colors[f] || "blue";
+function isValueValid(val) {
+    if (!val) return false;
+    let v = val.toString().trim();
+    return v !== "" && v !== "-" && v !== "null";
 }
 
-fetch("data.csv")
-.then(r=>r.text())
-.then(csv=>{
-
-Papa.parse(csv,{
-    header:true,
-    complete:function(res){
-
-        let setF = new Set();
-
-        res.data.forEach(r=>{
-
-            let f=r["fournisseur"]?.trim();
-            let lat=parseFloat(r["latitude (fournisseur)"]);
-            let lng=parseFloat(r["longitude (fournisseur)"]);
-
-            if(!f || isNaN(lat) || isNaN(lng)) return;
-
-            setF.add(f);
-
-            let m=L.marker([lat,lng]).addTo(map);
-            m.data={f};
-            markers.push(m);
-        });
-
-        remplir("filtreNom",setF);
-        drawLegendFromDropdown(); // IMPORTANT
-    }
-});
-
-});
-
-function remplir(id,set){
-    let s=document.getElementById(id);
-    set.forEach(v=>{
-        let o=document.createElement("option");
-        o.value=v;
-        o.textContent=v;
-        s.appendChild(o);
+function getIcon(color) {
+    return new L.Icon({
+        iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
+        shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
     });
 }
 
-/* ✅ LÉGENDE = STRICTEMENT LE DROPDOWN */
-function drawLegendFromDropdown(){
+function normalize(str) {
+    return str
+        ? str.toString()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .trim()
+            .toLowerCase()
+        : "";
+}
 
-    if(window.legend) map.removeControl(window.legend);
+fetch("data.csv")
+.then(r => r.text())
+.then(csv => {
 
-    window.legend=L.control({position:'bottomright'});
+    Papa.parse(csv, {
+        header: true,
+        skipEmptyLines: true,
 
-    window.legend.onAdd=function(){
+        complete: function(results) {
 
-        let div=L.DomUtil.create("div","legend");
+            let frsSet = new Set();
+            let villeSet = new Set();
+            let cpSet = new Set();
+            let prodSet = new Set();
 
-        div.innerHTML="<b>Fournisseurs</b>";
+            results.data.forEach(row => {
 
-        let options=[...document.getElementById("filtreNom").options]
-            .map(o=>o.value)
-            .filter(v=>v); // supprime ""
+                let latF = parseFloat(row["latitude (fournisseur)"]?.replace(",", "."));
+                let lngF = parseFloat(row["longitude (fournisseur)"]?.replace(",", "."));
 
-        options.forEach(f=>{
+                let f = row["fournisseur"]?.trim();
+                let v = row["ville"]?.trim();
+                let cp = row["CP"]?.trim();
+                let p = row["Produit"]?.trim() || row["Produit "]?.trim();
 
-            let item=document.createElement("div");
-            item.className="legend-item";
+                if (!isValueValid(f) || isNaN(latF) || isNaN(lngF)) return;
 
-            item.innerHTML=`
-                <div class="legend-box" style="background:${getColor(f)}"></div>
+                frsSet.add(f);
+                if (isValueValid(v)) villeSet.add(v);
+                if (isValueValid(cp)) cpSet.add(cp);
+                if (isValueValid(p)) prodSet.add(p);
+
+                let m = L.marker([latF, lngF], {
+                    icon: getIcon(codesCouleurs[f] || "blue")
+                }).addTo(map);
+
+                m.data = { f, v, cp, p, lat: latF, lng: lngF };
+                markers.push(m);
+            });
+
+            remplirSelect("filtreNom", frsSet, "Fournisseur");
+            remplirSelect("filtreVille", villeSet, "Ville");
+            remplirSelect("filtreCP", cpSet, "CP");
+            remplirSelect("filtreProduit", prodSet, "Produit");
+
+            ajouterLegendes(); // 🔥 important
+        }
+    });
+});
+
+function remplirSelect(id, set, label) {
+    let s = document.getElementById(id);
+    s.innerHTML = `<option value="">${label} : Tous</option>`;
+    Array.from(set).sort().forEach(v => {
+        if (isValueValid(v)) {
+            let o = document.createElement("option");
+            o.value = v;
+            o.textContent = v;
+            s.appendChild(o);
+        }
+    });
+}
+
+/* ✅ SEULE MODIF : légende = dropdown fournisseur uniquement */
+function ajouterLegendes() {
+
+    if (window.dynamicLegend) {
+        map.removeControl(window.dynamicLegend);
+    }
+
+    window.dynamicLegend = L.control({ position: 'bottomright' });
+
+    window.dynamicLegend.onAdd = function () {
+
+        let div = L.DomUtil.create('div', 'legend');
+
+        div.innerHTML = `<b class="title">Fournisseurs</b>`;
+
+        // 🔥 SOURCE UNIQUE = DROPDOWN
+        let select = document.getElementById("filtreNom");
+
+        let fournisseurs = Array.from(select.options)
+            .map(o => o.value)
+            .filter(v => v);
+
+        fournisseurs.sort().forEach(f => {
+
+            let span = document.createElement("span");
+
+            span.innerHTML = `
+                <div class="legend-color-box" style="background:${codesCouleurs[f] || 'blue'}"></div>
                 ${f}
             `;
 
-            item.onclick=()=>{
-                document.getElementById("filtreNom").value=f;
+            span.onclick = () => {
+                document.getElementById("filtreNom").value = f;
                 filtrer();
             };
 
-            div.appendChild(item);
+            div.appendChild(span);
         });
 
         return div;
     };
 
-    window.legend.addTo(map);
+    window.dynamicLegend.addTo(map);
 }
 
-function filtrer(){
+function filtrer() {
 
-    let f=document.getElementById("filtreNom").value;
+    let f = document.getElementById("filtreNom").value;
 
-    markers.forEach(m=>{
-        if(!f || m.data.f===f){
+    markers.forEach(m => {
+        if (!f || m.data.f === f) {
             m.addTo(map);
         } else {
             map.removeLayer(m);
         }
     });
 
-    drawLegendFromDropdown(); // sync
+    ajouterLegendes();
 }
 
 </script>
