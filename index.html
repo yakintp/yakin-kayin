@@ -133,19 +133,6 @@ function normalize(str){
     return str ? str.toString().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().toLowerCase() : "";
 }
 
-function getDistance(lat1, lon1, lat2, lon2){
-    var R = 6371;
-    var dLat = (lat2-lat1)*Math.PI/180;
-    var dLon = (lon2-lon1)*Math.PI/180;
-
-    var a =
-        Math.sin(dLat/2)**2 +
-        Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
-        Math.sin(dLon/2)**2;
-
-    return R*(2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));
-}
-
 fetch("data.csv")
 .then(r=>r.text())
 .then(csv=>{
@@ -215,7 +202,7 @@ function remplir(id,set,label){
 }
 
 /* =========================
-   LÉGENDE CORRIGÉE
+   🔥 LÉGENDE CORRIGÉE UNIQUEMENT
    ========================= */
 function ajouterLegendes(){
 
@@ -230,15 +217,6 @@ function ajouterLegendes(){
         .map(o => o.value)
         .filter(v => v);
 
-    let visibles = new Set();
-
-    markers.forEach(m=>{
-        let d=m.data;
-        if(!produit || normalize(d.p) === produit){
-            visibles.add(d.f);
-        }
-    });
-
     var legend = L.control({position:"bottomright"});
 
     legend.onAdd=function(){
@@ -249,9 +227,16 @@ function ajouterLegendes(){
 
         fournisseurs.forEach(f=>{
 
-            if(produit && !visibles.has(f)){
-                return;
-            }
+            let visible = false;
+
+            markers.forEach(m=>{
+                let d=m.data;
+                if(!produit || normalize(d.p) === produit){
+                    if(d.f === f) visible = true;
+                }
+            });
+
+            if(produit && !visible) return;
 
             let color=codesCouleurs[f]||"#999";
 
