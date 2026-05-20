@@ -257,6 +257,7 @@ fetch("data.csv")
 
                 if (isValueValid(v)) {
                     villeSet.add(v);
+
                     if (!isNaN(latV)) {
                         villesCoords[normalize(v)] = [latV, lngV];
                     }
@@ -265,6 +266,7 @@ fetch("data.csv")
                 if (!isValueValid(f) || isNaN(latF) || isNaN(lngF)) return;
 
                 frsSet.add(f);
+
                 if (isValueValid(cp)) cpSet.add(cp);
                 if (isValueValid(p)) prodSet.add(p);
 
@@ -317,7 +319,7 @@ function remplirSelect(id, set, label) {
     });
 }
 
-// 🔥 MODIFICATION ICI : synchronisation légende + filtres
+/* ====== MODIF UNIQUE : synchronisation légende + produit ====== */
 function ajouterLegendes(fournisseursFiltres = null) {
 
     if (window.dynamicLegend) {
@@ -332,8 +334,20 @@ function ajouterLegendes(fournisseursFiltres = null) {
 
         div.innerHTML = `<b class="title" style="color:red;">Fournisseurs</b>`;
 
-        let fournisseursAffiches =
-            fournisseursFiltres || Object.keys(codesCouleurs);
+        let produitActif = normalize(document.getElementById("filtreProduit").value);
+
+        let fournisseursAffiches = fournisseursFiltres || Object.keys(codesCouleurs);
+
+        // SYNCHRO PRODUIT + FOURNISSEUR
+        if (produitActif) {
+            let filtresOk = new Set();
+            markers.forEach(m => {
+                if (normalize(m.data.p) === produitActif) {
+                    filtresOk.add(m.data.f);
+                }
+            });
+            fournisseursAffiches = fournisseursAffiches.filter(f => filtresOk.has(f));
+        }
 
         fournisseursAffiches.sort().forEach(f => {
 
@@ -341,22 +355,14 @@ function ajouterLegendes(fournisseursFiltres = null) {
 
             let iconHtml = logosMap[f]
                 ? `<img src="${logosMap[f]}" class="legend-logo"
-                     onerror="this.outerHTML='<div class=\\'legend-color-box\\' style=\\'background:${codesCouleurs[f]}\\'></div>'">`
-                : `<div class="legend-color-box"
-                     style="background:${codesCouleurs[f] || '#ccc'}"></div>`;
+                    onerror="this.outerHTML='<div class=\\'legend-color-box\\' style=\\'background:${codesCouleurs[f]}\\'></div>'">`
+                : `<div class="legend-color-box" style="background:${codesCouleurs[f]}"></div>`;
 
             let span = document.createElement("span");
-
             span.innerHTML = `${iconHtml} ${f}`;
 
             span.onclick = () => {
-
-                // ✅ sync fournisseur
                 document.getElementById("filtreNom").value = f;
-
-                // ✅ sync produit (reset pour éviter incohérence)
-                document.getElementById("filtreProduit").value = "";
-
                 filtrer();
             };
 
@@ -383,10 +389,7 @@ function filtrer() {
 
     if (cercleRayon) map.removeLayer(cercleRayon);
 
-    let centre =
-        (ville && villesCoords[ville])
-        ? villesCoords[ville]
-        : null;
+    let centre = (ville && villesCoords[ville]) ? villesCoords[ville] : null;
 
     if (centre && rayon > 0) {
         cercleRayon = L.circle(centre, {
