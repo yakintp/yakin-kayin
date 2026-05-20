@@ -1,63 +1,36 @@
 <!DOCTYPE html> 
 <html lang="fr"> 
 <head>
-<meta charset="utf-8"/>
-<title>Carte Fournisseurs Île-de-France</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-
-<style>
-body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 15px; background: #f4f4f4; }
-
-.header { display: flex; align-items: center; background: white; padding: 10px 20px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); gap: 20px; }
-.header img { height: 50px; width: auto; }
-.header h2 { margin: 0; color: #333; }
-
-#map { height: 600px; border-radius: 8px; border: 1px solid #ccc; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-
-.filters { margin-bottom: 15px; background: white; padding: 15px; border-radius: 8px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-
-select, input { padding: 8px; border-radius: 4px; border: 1px solid #ddd; min-width: 150px; }
-
-.range-box { background: #eef2f3; padding: 8px 15px; border-radius: 6px; border: 1px solid #ddd; display: flex; align-items: center; gap: 10px; }
-
-.legend { 
-    background: white; padding: 10px; border-radius: 8px; box-shadow: 0 0 5px rgba(0,0,0,0.3); 
-    line-height: 22px; max-height: 500px; overflow-y: auto; width: 260px; font-size: 11px;
-}
-
-.legend b.title { font-size: 14px; display: block; margin-bottom: 8px; border-bottom: 2px solid #eee; color: red; }
-
-.legend span { cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 3px 5px; border-radius: 3px; font-weight: bold; }
-
-.legend span:hover { background: #f0f0f0; }
-
-.legend-logo { width: 20px; height: 20px; object-fit: contain; border-radius: 2px; background: white; border: 1px solid #f0f0f0; }
-
-.legend-color-box { display: inline-block; width: 16px; height: 16px; border-radius: 3px; border: 1px solid #999; }
-</style>
+    <meta charset="utf-8"/>
+    <title>Carte Fournisseurs Île-de-France</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 15px; background: #f4f4f4; }
+        .header { display: flex; align-items: center; background: white; padding: 10px 20px; border-radius: 8px; margin-bottom: 15px; }
+        #map { height: 600px; border-radius: 8px; }
+        .filters { margin-bottom: 15px; background: white; padding: 15px; border-radius: 8px; display:flex; gap:10px; }
+    </style>
 </head>
 
 <body>
 
 <div class="header">
-<img src="logo.png">
-<h2>Carte Fournisseurs Île-de-France</h2>
+    <img src="logo.png" style="height:50px;">
+    <h2>Carte Fournisseurs Île-de-France</h2>
 </div>
 
 <div class="filters">
-<select id="filtreNom" onchange="filtrer()"><option value="">Fournisseur : Tous</option></select>
-<select id="filtreVille" onchange="filtrer()"><option value="">Ville : Toutes</option></select>
-<select id="filtreCP" onchange="filtrer()"><option value="">CP : Tous</option></select>
-<select id="filtreProduit" onchange="filtrer()"><option value="">Produit : Tous</option></select>
 
-<div class="range-box">
-Rayon :
-<input type="range" id="filtreRayon" min="0" max="50" value="0"
-oninput="document.getElementById('rayonVal').innerText=this.value; filtrer();">
-<span id="rayonVal">0</span> km
-</div>
+    <!-- ✅ UNIQUEMENT FOURNISSEUR + PRODUIT -->
+    <select id="filtreNom" onchange="filtrer()">
+        <option value="">Fournisseur : Tous</option>
+    </select>
 
-<button onclick="location.reload()">Reset</button>
+    <select id="filtreProduit" onchange="filtrer()">
+        <option value="">Produit : Tous</option>
+    </select>
+
+    <button onclick="location.reload()">Reset</button>
 </div>
 
 <div id="map"></div>
@@ -75,147 +48,125 @@ var villesCoords = {};
 var cercleRayon = null;
 
 var codesCouleurs = {
-"Loxam":"blue","Point P":"red","Raboni":"green","Cemex":"grey","Tersen":"yellow"
+    "Loxam": "blue",
+    "Point P": "red",
+    "Raboni": "green",
+    "Cemex": "black",
+    "Tersen": "orange"
 };
 
-var logosMap = {};
-
-function isValueValid(val){
-return val && val.toString().trim() !== "" && val !== "-";
-}
-
-function getIcon(color){
-return new L.Icon({
-iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
-shadowUrl:'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
-iconSize:[25,41],iconAnchor:[12,41]
-});
-}
-
 function normalize(str){
-return str ? str.toString().normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim() : "";
-}
-
-function getDistance(lat1,lon1,lat2,lon2){
-var R=6371;
-var dLat=(lat2-lat1)*Math.PI/180;
-var dLon=(lon2-lon1)*Math.PI/180;
-var a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-return R*(2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));
+    return str ? str.toString().toLowerCase().trim() : "";
 }
 
 fetch("data.csv")
-.then(r=>r.text())
-.then(csv=>{
-Papa.parse(csv,{
-header:true,
-complete:function(res){
+.then(r => r.text())
+.then(csv => {
 
-let frsSet=new Set();
-let villeSet=new Set();
-let cpSet=new Set();
-let prodSet=new Set();
+    Papa.parse(csv, {
+        header:true,
+        skipEmptyLines:true,
+        complete:function(results){
 
-res.data.forEach(r=>{
+            let frsSet = new Set();
+            let prodSet = new Set();
 
-let f=r["fournisseur"]?.trim();
-let v=r["ville"]?.trim();
-let cp=r["CP"]?.trim();
-let p=r["Produit"]?.trim();
+            results.data.forEach(row => {
 
-if(f) frsSet.add(f);
-if(v) villeSet.add(v);
-if(cp) cpSet.add(cp);
-if(p) prodSet.add(p);
+                let f = row["fournisseur"]?.trim();
+                let p = row["Produit"]?.trim();
 
-if(!r.lat || !r.lng) return;
+                let lat = parseFloat(row["latitude (fournisseur)"]?.replace(",", "."));
+                let lng = parseFloat(row["longitude (fournisseur)"]?.replace(",", "."));
 
-let m=L.marker([r.lat,r.lng],{icon:getIcon("blue")});
-m.data={f,v,cp,p,lat:r.lat,lng:r.lng};
-m.addTo(map);
-markers.push(m);
+                if(!f || isNaN(lat) || isNaN(lng)) return;
+
+                frsSet.add(f);
+                if(p) prodSet.add(p);
+
+                let marker = L.marker([lat,lng]).addTo(map);
+
+                marker.data = { f, p, lat, lng };
+
+                markers.push(marker);
+            });
+
+            remplir("filtreNom", frsSet, "Fournisseur");
+            remplir("filtreProduit", prodSet, "Produit");
+
+            ajouterLegende();
+        }
+    });
 });
 
-remplirSelect("filtreNom",frsSet,"Fournisseur");
-remplirSelect("filtreVille",villeSet,"Ville");
-remplirSelect("filtreCP",cpSet,"CP");
-remplirSelect("filtreProduit",prodSet,"Produit");
-
-ajouterLegendes();
+function remplir(id,set,label){
+    let s = document.getElementById(id);
+    s.innerHTML = `<option value="">${label} : Tous</option>`;
+    Array.from(set).sort().forEach(v=>{
+        let o=document.createElement("option");
+        o.value=v;
+        o.textContent=v;
+        s.appendChild(o);
+    });
 }
-});
-});
 
-function remplirSelect(id,set,label){
-let s=document.getElementById(id);
-s.innerHTML=`<option value="">${label} : Tous</option>`;
-Array.from(set).sort().forEach(v=>{
-let o=document.createElement("option");
-o.value=v;o.textContent=v;
-s.appendChild(o);
-});
-}
+function ajouterLegende(fournisseurs = null){
 
-// ✅ LÉGENDE SYNCHRONISÉE CSV + PRODUITS
-function ajouterLegendes(){
+    if(window.legend) map.removeControl(window.legend);
 
-var legend=L.control({position:'bottomright'});
+    let legend = L.control({position:'bottomright'});
 
-legend.onAdd=function(){
+    legend.onAdd = function(){
 
-var div=L.DomUtil.create('div','legend');
+        let div = L.DomUtil.create('div','legend');
+        div.innerHTML = "<b>Fournisseurs</b><br>";
 
-div.innerHTML="<b class='title'>Fournisseurs</b>";
+        let list = fournisseurs || Object.keys(codesCouleurs);
 
-// 🔥 SYNCHRO AUTOMATIQUE AVEC LISTE CSV
-let fournisseursAffiches =
-Array.from(document.querySelectorAll("#filtreNom option"))
-.map(o=>o.value)
-.filter(v=>v);
+        list.forEach(f=>{
 
-fournisseursAffiches.forEach(f=>{
+            let span = document.createElement("span");
+            span.innerHTML = f;
 
-let span=document.createElement("span");
-span.innerHTML=f;
+            span.onclick = () => {
+                document.getElementById("filtreNom").value = f;
+                filtrer();
+            };
 
-span.onclick=()=>{
-document.getElementById("filtreNom").value=f;
-filtrer();
-};
+            div.appendChild(span);
+        });
 
-div.appendChild(span);
-});
+        return div;
+    };
 
-return div;
-};
-
-legend.addTo(map);
-window.legend=legend;
+    legend.addTo(map);
+    window.legend = legend;
 }
 
 function filtrer(){
 
-let prod=normalize(document.getElementById("filtreProduit").value);
+    let nom = normalize(document.getElementById("filtreNom").value);
+    let prod = normalize(document.getElementById("filtreProduit").value);
 
-let visibles=new Set();
+    let visibles = new Set();
 
-markers.forEach(m=>{
+    markers.forEach(m=>{
 
-let d=m.data;
-let ok=true;
+        let d = m.data;
+        let ok = true;
 
-if(prod && normalize(d.p)!==prod) ok=false;
+        if(nom && normalize(d.f)!==nom) ok=false;
+        if(prod && normalize(d.p)!==prod) ok=false;
 
-if(ok){
-m.addTo(map);
-visibles.add(d.f);
-}else{
-map.removeLayer(m);
-}
-});
+        if(ok){
+            m.addTo(map);
+            visibles.add(d.f);
+        } else {
+            map.removeLayer(m);
+        }
+    });
 
-// 🔥 garde synchro produit + CSV
-ajouterLegendes();
+    ajouterLegende(Array.from(visibles));
 }
 
 </script>
